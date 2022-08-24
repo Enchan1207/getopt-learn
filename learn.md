@@ -183,7 +183,7 @@ POSIX準拠のパースが行える`getopt`、GNU拡張形式のパースが行�
 今回は一文字のオプションの他に `--help` や `--version` も実装したいので、最終的には`getopt_long`を使うことになるのですが、
 その前に一旦`getopt`の使い方を整理しておきます。
 
-### 構文
+### getopt()
 
 関数`getopt()`の構文は次のようになっています:
 
@@ -221,5 +221,88 @@ POSIX準拠のパースが行える`getopt`、GNU拡張形式のパースが行�
 
 (文字列変数の処理に 拙作[Enchan1207/tinystr](https://github.com/Enchan1207/tinystr)を使用しています。)
 
+### 1. オプションに定義された引数のみが順番通りに渡った場合 `(src/test_1)`
 
+まずは最も単純なパターンから。
 
+ - optstring: `i:o::v`
+ - argv:
+     - `(progname)`
+     - `-i`
+     - `option_argument_i`
+     - `-o`
+     - `option_argument_o`
+     - `-v`
+
+`getopt`の戻り値が `-1` になるまでループすると...
+
+|ループ回数|戻り値|`optind`|`optopt`|`optarg`|
+|-|-|-|-|-|
+|0|i|3|i|option_argument_i|
+|1|o|5|o|option_argument_o|
+|2|v|6|v|NULL|
+
+このようになります。  
+渡された順に引数が解析され、オプションを発見すると`optopt`が更新され、引数を持つ場合は`optarg`になる…といった動作です。
+
+### 2. オペランドを含む場合 `(src/test_2)`
+
+ - optstring: `i:o::v`
+ - argv:
+     - `(progname)`
+     - `-i`
+     - `option_argument_i`
+     - `-o`
+     - `option_argument_o`
+     - `-v`
+     - `operand_1`
+     - `operand_2`
+     - `operand_3`
+
+パース処理までは1.と同じ動作となりますが、`getopt`が`-1`を返した段階の`optind`が`6`となります。
+つまり、以下のようなコードでオペランドを順番に取得することが可能です:
+
+```C
+for (int i = optind; i < args.count; i++) {
+    int operand_index = i - optind;
+    printf("operand %d: %s\n", operand_index, argv[i]);
+}
+```
+
+### 3. オプションより前にオペランドがくる場合 `(src/test_3)`
+
+ - optstring: `i:o::v`
+ - argv:
+     - `operand_1`
+     - `operand_2`
+     - `operand_3`
+     - `(progname)`
+     - `-i`
+     - `option_argument_i`
+     - `-o`
+     - `option_argument_o`
+     - `-v`
+
+この場合の処理は**処理系依存**ですが、手元の環境では **一度目の`getopt`の呼び出しで`-1`が返ります**。
+つまりその後の出力は**全てオペランドとして解釈**されます。
+
+### 4. 引数を要求するオプションに対し、オプションのみを渡した場合 `(src/test_4)`
+
+ - optstring: `i:`
+ - argv:
+     - `-i`
+
+`<実行ファイル名>: option requires an argument -- i` というエラーが表示され、`getopt`の戻り値は`?`となります。
+このエラーはグローバル変数`opterr`を`0`に設定することで非表示にできます。
+
+### 5. 引数をoptionalで要求するオプションに対し、オプションのみを渡した場合 `(src/test_5)`
+
+ - optstring: `o::`
+ - argv:
+     - `-o`
+
+引数がオプショナルの場合、`getopt`の戻り値は`?`となりますが、**`optopt`の戻り値は`o`となります**。
+
+したがって、オプション引数が設定されたかどうかは `optopt == getopt()` で判断することができます。
+
+### 6. 
