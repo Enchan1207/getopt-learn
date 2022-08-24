@@ -221,7 +221,7 @@ POSIX準拠のパースが行える`getopt`、GNU拡張形式のパースが行�
 
 (文字列変数の処理に 拙作[Enchan1207/tinystr](https://github.com/Enchan1207/tinystr)を使用しています。)
 
-### 1. オプションに定義された引数のみが順番通りに渡った場合 `(src/test_1)`
+### 1. オプションに定義された引数のみが順番通りに渡った場合 (`src/test_1`)
 
 まずは最も単純なパターンから。
 
@@ -243,9 +243,9 @@ POSIX準拠のパースが行える`getopt`、GNU拡張形式のパースが行�
 |2|v|6|v|NULL|
 
 このようになります。  
-渡された順に引数が解析され、オプションを発見すると`optopt`が更新され、引数を持つ場合は`optarg`になる…といった動作です。
+渡された順に引数が解析され、オプションを発見すると`optopt`が更新され、引数を持つ場合は`optarg`に格納される…といった動作です。
 
-### 2. オペランドを含む場合 `(src/test_2)`
+### 2. オペランドを含む場合 (`src/test_2`)
 
  - optstring: `i:o::v`
  - argv:
@@ -269,7 +269,7 @@ for (int i = optind; i < args.count; i++) {
 }
 ```
 
-### 3. オプションより前にオペランドがくる場合 `(src/test_3)`
+### 3. オプションより前にオペランドがくる場合 (`src/test_3`)
 
  - optstring: `i:o::v`
  - argv:
@@ -286,7 +286,7 @@ for (int i = optind; i < args.count; i++) {
 この場合の処理は**処理系依存**ですが、手元の環境では **一度目の`getopt`の呼び出しで`-1`が返ります**。
 つまりその後の出力は**全てオペランドとして解釈**されます。
 
-### 4. 引数を要求するオプションに対し、オプションのみを渡した場合 `(src/test_4)`
+### 4. 引数を要求するオプションに対し、オプションのみを渡した場合 (`src/test_4`)
 
  - optstring: `i:`
  - argv:
@@ -295,7 +295,7 @@ for (int i = optind; i < args.count; i++) {
 `<実行ファイル名>: option requires an argument -- i` というエラーが表示され、`getopt`の戻り値は`?`となります。
 このエラーはグローバル変数`opterr`を`0`に設定することで非表示にできます。
 
-### 5. 引数をoptionalで要求するオプションに対し、オプションのみを渡した場合 `(src/test_5)`
+### 5. 引数をoptionalで要求するオプションに対し、オプションのみを渡した場合 (`src/test_5`)
 
  - optstring: `o::`
  - argv:
@@ -305,4 +305,52 @@ for (int i = optind; i < args.count; i++) {
 
 したがって、オプション引数が設定されたかどうかは `optopt == getopt()` で判断することができます。
 
-### 6. 
+### getopt_long()
+
+関数`getopt_long()`の構文は次のようになっています:
+
+> 
+> SYNOPSIS  
+>     extern char *optarg;  
+>     extern int optind;  
+>     extern int optopt;  
+>     extern int opterr;  
+>     extern int optreset;
+> 
+>     int  
+>     getopt_long(int argc, char * const *argv, const char *optstring, const struct option *longopts, int *longindex);
+> 
+
+(参考: `man 3 getopt_long`)
+
+基本的にはほぼほぼ`getopt`と変わりません。ロングオプションを考慮しなければ`getopt`と同じように動作します。
+
+`struct option` および `longindex` については、順を追って整理します。
+
+### 6. ロングオプションを受け入れるための構造体を作る (`src/test_6`)
+
+構造体 `option` の構造は以下のようになっています:
+
+ - `const char* name`  
+    ロングオプションの名称.
+ - `int has_arg`  
+    オプションが引数を要求するかどうか.   
+    定数 `no_argument`, `required_argument`, `optional_argument` が用意されている.
+ - `int* flag`  
+    このオプションをフラグ変数として扱うかどうか.
+ - `int val`  
+    このオプションを発見したときの `getopt_long` の戻り値となる値。
+
+`name`, `has_arg` に関しては`getopt`と同様です。
+
+`flag`はその名の通り、そのオプションをフラグとして扱うかを制御します。  
+ここにポインタを渡すと **`getopt_long`の戻り値が0となり**、また本来の戻り値がそちらに格納されます。
+
+`val` はオプションを発見した際の`getopt_long`の戻り値を設定します。
+
+### 7. フラグ変数が更新される要因 (`src/test_7`)
+
+仮に `val` と同じ値が `optstring` に含まれていても、それをショートオプションとして渡した場合はフラグ変数は**更新されません**。また**戻り値はゼロではなくcharが返ります**。
+
+つまり、フラグとして運用する場合はロングオプションで指定しないと効かないということです。(要検証)
+
