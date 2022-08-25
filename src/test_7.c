@@ -12,51 +12,105 @@
 
 #define FATAL_ERROR exit(EXIT_FAILURE)
 
+struct opt_globals {
+    char* optarg;
+    int optind;
+    int optopt;
+    int opterr;
+    int optreset;
+};
+
+void init_globals(struct opt_globals* globals) {
+    globals->optarg = "";
+    globals->optind = 1;
+    globals->optopt = '\0';
+    globals->opterr = 1;
+    globals->optreset = 1;
+}
+
+void push_globals(struct opt_globals* globals) {
+    globals->optarg = optarg;
+    globals->optind = optind;
+    globals->optopt = optopt;
+    globals->opterr = opterr;
+    globals->optreset = optreset;
+}
+
+void pop_globals(struct opt_globals* globals) {
+    optarg = globals->optarg;
+    optind = globals->optind;
+    optopt = globals->optopt;
+    opterr = globals->opterr;
+    optreset = globals->optreset;
+}
+
 int main(int argc, char const* _argv[]) {
     struct string_list args;
-    init_string_list(&args, 0);
-    ADD_ARGUMENT(&args, _argv[0]);
+    init_string_list(&args, 2);
 
-    // オプションを管理する構造体配列
-    int help_flag = 0;
+    // ロングオプションの戻り値とショートオプションの戻り値が等しい場合
+    // (同一のオプション文字を指定した場合)
     struct option options[] = {
-        {"help", no_argument, &help_flag, 'h'}};
-
-    //
-    // struct optionの構造は以下の通り
-
-    // - const char* name
-    //      ロングオプションの名称. 1文字のオプションはこちらに記述しなくてもよい (むしろ、optstringと重複するのはよくなさそう)
-    // - int has_arg
-    //      オプションが引数を要求するかどうか. no_argument, required_argument, optional_argument の定数が用意されている.
-    // - int* flag
-    //      このメンバがNULLでないとき、getopt_long の戻り値は0となり、本来の戻り値はこちらに格納される。
-    // - int val
-    //      このオプションが指定されたとき、getopt_longの戻り値となる値。
-    //
-
-    // 短いオプション
+        {"help", no_argument, NULL, 'h'},
+        {0, 0, 0, 0}};
     const char* optstring = "h";
 
-    // 実行引数のエミュレート
-    ADD_ARGUMENT(&args, "--help");
-    char** argv = char_repr_string_list(&args);
+    // パース前のグローバル変数を取得・保持しておく
+    struct opt_globals globals;
+    init_globals(&globals);
+    pop_globals(&globals);
 
-    // パース
-    int result = getopt_long((int)args.count, argv, optstring, options, NULL);
-    assert(result == 0);       // helpオプションはフラグ変数を持っているので、関数の戻り値は0
-    assert(help_flag == 'h');  // フラグ変数にオプションのメンバで指定した値が返る
+    char** argv;
+    int result;
+    int longindex;
 
-    // optindを戻してもう一度パース
-    set_string_list(&args, 1, "-h");  // ショートオプションとして渡った想定
-    optind = 1;
-    help_flag = '\0';
+    // 1. ロングオプションを渡した場合
+    longindex = -1;
+    optreset = 1;
+    push_globals(&globals);
+    set_string_list(&args, 1, "--help");
+    argv = char_repr_string_list(&args);
+    result = getopt_long((int)args.count, argv, optstring, options, &longindex);
 
-    result = getopt_long((int)args.count, argv, optstring, options, NULL);
-    assert(result == 'h');      // ショートオプションで渡されているので、戻り値はそのままオプション名
-    assert(help_flag == '\0');  // フラグ変数は更新されない
+    assert(result == 'h');   // この 'h' は、struct option.valの値
+    assert(longindex == 0);  // options[0]にマッチしたので、longindexが更新される
 
     free(argv);
+    pop_globals(&globals);
+
+    // 2. ショートオプションを渡した場合
+    longindex = -1;
+    optreset = 1;
+    push_globals(&globals);
+    set_string_list(&args, 1, "-h");
+    argv = char_repr_string_list(&args);
+    result = getopt_long((int)args.count, argv, optstring, options, &longindex);
+
+    assert(result == 'h');    // この 'h' は、optstring内の値
+    assert(longindex == -1);  // ロングオプションとはマッチしなかったので、longindexは更新されない
+
+    free(argv);
+    pop_globals(&globals);
+
+    // 3. 両方渡した場合
+    longindex = -1;
+    optreset = 1;
+    push_globals(&globals);
+    set_string_list(&args, 1, "-h");
+    ADD_ARGUMENT(&args, "--help");
+    argv = char_repr_string_list(&args);
+
+    result = getopt_long((int)args.count, argv, optstring, options, &longindex);
+    assert(result == 'h');    // この 'h' は、optstring内の値
+    assert(longindex == -1);  // ロングオプションとはマッチしなかったので、longindexは更新されない
+
+    result = getopt_long((int)args.count, argv, optstring, options, &longindex);
+    assert(result == 'h');   // この 'h' は、struct option.valの値
+    assert(longindex == 0);  // options[0]にマッチしたので、longindexが更新される
+
+    free(argv);
+    pop_globals(&globals);
+
     free_string_list(&args);
     return 0;
 }

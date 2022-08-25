@@ -20,7 +20,8 @@ int main(int argc, char const* _argv[]) {
     // オプションを管理する構造体配列
     int help_flag = 0;
     struct option options[] = {
-        {"help", no_argument, &help_flag, 'H'}};
+        {"help", no_argument, &help_flag, 'H'},
+        {0, 0, 0, 0}};
 
     //
     // struct optionの構造は以下の通り
